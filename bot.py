@@ -328,7 +328,8 @@ async def manejar_texto(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 def main():
     """Función principal"""
     # AQUÍ DEBES PONER TU TOKEN
-    TOKEN = '8247789454:AAFWgZnwPLury_b2S7iTu-6SyFDNuVUrv1Q'
+    import os
+    TOKEN = os.environ.get('TOKEN')
     
     application = Application.builder().token(TOKEN).build()
     
@@ -347,4 +348,5 @@ def main():
     application.run_polling()
 
 if __name__ == '__main__':
+
     main()
