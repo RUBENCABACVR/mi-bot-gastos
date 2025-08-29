@@ -3,7 +3,6 @@ import sqlite3
 from datetime import datetime, timedelta, date
 import csv
 import io
-import os
 import calendar
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, ContextTypes, filters
@@ -513,6 +512,42 @@ async def analisis_tendencias(update: Update, context: ContextTypes.DEFAULT_TYPE
     
     await update.message.reply_text(mensaje)
 
+async def agregar_gasto_inicio(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Inicia el proceso de agregar gasto"""
+    keyboard = []
+    row = []
+    
+    for key, value in CATEGORIAS.items():
+        row.append(InlineKeyboardButton(value, callback_data=f'categoria_{key}'))
+        if len(row) == 2:
+            keyboard.append(row)
+            row = []
+    
+    if row:
+        keyboard.append(row)
+    
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await update.message.reply_text(
+        "🛒 Selecciona la categoría del gasto:",
+        reply_markup=reply_markup
+    )
+
+async def callback_categoria(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Maneja la selección de categoría para gastos"""
+    query = update.callback_query
+    await query.answer()
+    
+    categoria = query.data.replace('categoria_', '')
+    context.user_data['categoria'] = categoria
+    
+    await query.edit_message_text(
+        f"Has seleccionado: {CATEGORIAS[categoria]}\n\n"
+        "Ahora envía el monto y descripción del gasto.\n"
+        "Formato: monto descripción\n"
+        "Ejemplo: 50000 hamburguesa"
+    )
+
 async def callback_presupuesto_categoria(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Maneja selección de categoría para presupuesto"""
     query = update.callback_query
@@ -526,6 +561,40 @@ async def callback_presupuesto_categoria(update: Update, context: ContextTypes.D
         "Envía el monto del presupuesto para esta categoría.\n"
         "Ejemplo: 1500"
     )
+
+async def procesar_gasto(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Procesa el gasto ingresado por el usuario"""
+    if 'categoria' not in context.user_data:
+        await update.message.reply_text(
+            "Primero selecciona una categoría usando 'Agregar Gasto'"
+        )
+        return
+    
+    try:
+        texto = update.message.text.strip()
+        partes = texto.split(' ', 1)
+        
+        monto = float(partes[0].replace(',', ''))
+        descripcion = partes[1] if len(partes) > 1 else ""
+        
+        categoria = context.user_data['categoria']
+        user_id = update.effective_user.id
+        
+        expense_bot.agregar_gasto(user_id, categoria, monto, descripcion)
+        
+        respuesta = f"✅ Gasto registrado:\n"
+        respuesta += f"📂 {CATEGORIAS[categoria]}\n"
+        respuesta += f"💰 ${monto:,.0f}\n"
+        respuesta += f"📝 {descripcion or 'Sin descripción'}"
+        
+        await update.message.reply_text(respuesta)
+        context.user_data.clear()
+        
+    except (ValueError, IndexError):
+        await update.message.reply_text(
+            "❌ Formato incorrecto. Usa: monto descripción\n"
+            "Ejemplo: 50000 hamburguesa"
+        )
 
 async def nuevo_recurrente(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Comando para crear nuevo gasto recurrente"""
@@ -587,6 +656,8 @@ async def manejar_texto(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         await estado_detallado(update, context)
     elif texto == "📈 Análisis y Tendencias":
         await analisis_tendencias(update, context)
+    elif texto == "🛒 Agregar Gasto":
+        await agregar_gasto_inicio(update, context)
     elif context.user_data.get('categoria_presupuesto'):
         # Procesar monto de presupuesto por categoría
         try:
@@ -606,13 +677,17 @@ async def manejar_texto(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         except ValueError:
             await update.message.reply_text("Por favor ingresa un número válido")
     else:
-        await update.message.reply_text(
-            "Usa los botones del menú para interactuar conmigo"
-        )
+        # Si hay una categoría seleccionada, procesar como gasto
+        if 'categoria' in context.user_data:
+            await procesar_gasto(update, context)
+        else:
+            await update.message.reply_text(
+                "Usa los botones del menú para interactuar conmigo"
+            )
 
 def main():
     """Función principal"""
-    TOKEN = os.environ.get('TOKEN')
+    TOKEN = '8165111585:AAHuaV1P5IAI7AM0dinpTZlDa0QXYM0rDOs'
     
     application = Application.builder().token(TOKEN).build()
     
@@ -622,6 +697,7 @@ def main():
     
     # Callbacks
     application.add_handler(CallbackQueryHandler(callback_presupuesto_categoria, pattern='^presup_cat_'))
+    application.add_handler(CallbackQueryHandler(callback_categoria, pattern='^categoria_'))
     
     # Mensajes de texto
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, manejar_texto))
