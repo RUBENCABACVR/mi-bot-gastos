@@ -3,6 +3,7 @@ import sqlite3
 from datetime import datetime, timedelta, date
 import csv
 import io
+import os
 import calendar
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, ContextTypes, filters
@@ -687,7 +688,7 @@ async def manejar_texto(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
 def main():
     """Función principal"""
-    TOKEN = '8165111585:AAHuaV1P5IAI7AM0dinpTZlDa0QXYM0rDOs'
+    TOKEN = os.environ.get('TOKEN')
     
     application = Application.builder().token(TOKEN).build()
     
@@ -707,3 +708,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+
